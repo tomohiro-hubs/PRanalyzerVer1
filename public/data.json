@@ -1,0 +1,19 @@
+{
+  "plant": {
+    "id": "example-plant-1",
+    "name": "Sample Solar Plant",
+    "defaultPdcKw": 1000.0
+  },
+  "pcsList": [
+    { "id": "1-1-1", "name": "PCS 1-1-1", "ratedDcKw": 50.0 },
+    { "id": "1-1-2", "name": "PCS 1-1-2", "ratedDcKw": 50.0 },
+    { "id": "1-1-3", "name": "PCS 1-1-3", "ratedDcKw": 50.0 },
+    { "id": "1-1-4", "name": "PCS 1-1-4", "ratedDcKw": 50.0 },
+    { "id": "1-1-5", "name": "PCS 1-1-5", "ratedDcKw": 50.0 },
+    { "id": "1-2-1", "name": "PCS 1-2-1", "ratedDcKw": 50.0 },
+    { "id": "1-2-2", "name": "PCS 1-2-2", "ratedDcKw": 50.0 },
+    { "id": "1-2-3", "name": "PCS 1-2-3", "ratedDcKw": 50.0 },
+    { "id": "1-2-4", "name": "PCS 1-2-4", "ratedDcKw": 50.0 },
+    { "id": "1-2-5", "name": "PCS 1-2-5", "ratedDcKw": 50.0 }
+  ]
+}
