@@ -30,6 +30,8 @@ const Icons = {
     Download: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>,
     ChevronUp: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polyline points="18 15 12 9 6 15"/></svg>,
     ChevronDown: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polyline points="6 9 12 15 18 9"/></svg>,
+    Copy: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>,
+    Check: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polyline points="20 6 9 17 4 12"/></svg>,
 };
 
 // --- Heatmap Color Logic ---
@@ -245,8 +247,8 @@ const Header = ({ onReset, hasData, currentView, onChangeView }) => (
             <div className="flex items-center gap-4">
                 {currentView === 'analyzer' && hasData && <button onClick={onReset} className="text-sm font-medium text-blue-600 hover:text-blue-500">Upload New CSV</button>}
                 <div className="hidden sm:flex flex-col items-end text-[10px] text-gray-400 leading-tight border-l pl-4 border-gray-200">
-                    <span>Last Updated: 2025.12.04</span>
-                    <span>Version 1.0.0</span>
+                    <span>Last Updated: 2025.12.05</span>
+                    <span>Version 1.0.1</span>
                 </div>
             </div>
         </div>
@@ -254,9 +256,37 @@ const Header = ({ onReset, hasData, currentView, onChangeView }) => (
 );
 
 const PanelCalculator = () => {
+    const presets = [
+        { id: 'custom', name: 'カスタム入力', length: '', width: '' },
+        { id: 'wake', name: 'プリセット和気', length: '0.992', width: '1.956' },
+        { id: 'nasu', name: 'プリセット那須', length: '0.992', width: '2.000' },
+    ];
+
+    const [selectedPreset, setSelectedPreset] = useState('custom');
     const [length, setLength] = useState('');
     const [width, setWidth] = useState('');
     const [count, setCount] = useState('');
+    const [isCopied, setIsCopied] = useState(false);
+
+    const handlePresetChange = (e) => {
+        const presetId = e.target.value;
+        setSelectedPreset(presetId);
+        const preset = presets.find(p => p.id === presetId);
+        if (preset) {
+            setLength(preset.length);
+            setWidth(preset.width);
+        }
+    };
+
+    const handleLengthChange = (e) => {
+        setLength(e.target.value);
+        if (selectedPreset !== 'custom') setSelectedPreset('custom');
+    };
+
+    const handleWidthChange = (e) => {
+        setWidth(e.target.value);
+        if (selectedPreset !== 'custom') setSelectedPreset('custom');
+    };
 
     const areaPerPanel = useMemo(() => {
         const l = parseFloat(length);
@@ -276,6 +306,14 @@ const PanelCalculator = () => {
         return '-';
     }, [areaPerPanel, count]);
 
+    const handleCopy = () => {
+        if (totalArea === '-' || totalArea === '0.00') return;
+        navigator.clipboard.writeText(totalArea).then(() => {
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 2000);
+        });
+    };
+
     return (
         <div className="max-w-xl mx-auto mt-8 animate-fade-in">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">パネル面積計算</h2>
@@ -284,6 +322,18 @@ const PanelCalculator = () => {
             <div className="bg-white shadow-lg rounded-lg p-8 border border-gray-200">
                 <div className="space-y-6">
                     <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">パネル選択</label>
+                        <select 
+                            value={selectedPreset} 
+                            onChange={handlePresetChange}
+                            className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-white"
+                        >
+                            {presets.map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">パネル縦寸法 (m)</label>
                         <input 
                             type="number" 
@@ -291,7 +341,7 @@ const PanelCalculator = () => {
                             placeholder="例: 1.65" 
                             className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
                             value={length}
-                            onChange={(e) => setLength(e.target.value)}
+                            onChange={handleLengthChange}
                         />
                     </div>
                     <div>
@@ -302,7 +352,7 @@ const PanelCalculator = () => {
                             placeholder="例: 0.99" 
                             className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
                             value={width}
-                            onChange={(e) => setWidth(e.target.value)}
+                            onChange={handleWidthChange}
                         />
                     </div>
                     <div>
@@ -324,9 +374,19 @@ const PanelCalculator = () => {
                             <span>1枚あたりの面積:</span>
                             <span className="text-xl font-mono">{areaPerPanel} m²</span>
                         </div>
-                        <div className="flex justify-between items-baseline pt-2">
+                        <div className="flex justify-between items-center pt-2">
                             <span className="font-semibold">総パネル面積:</span>
-                            <span className="text-2xl font-mono font-bold text-blue-600">{totalArea} m²</span>
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl font-mono font-bold text-blue-600">{totalArea} <span className="text-base font-normal text-gray-600">m²</span></span>
+                                <button 
+                                    onClick={handleCopy}
+                                    disabled={totalArea === '-'}
+                                    className={`p-2 rounded-md transition-colors ${isCopied ? 'text-green-600 bg-green-50' : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                                    title="数値をコピー"
+                                >
+                                    {isCopied ? <Icons.Check width={20} height={20} /> : <Icons.Copy width={20} height={20} />}
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <p className="mt-4 text-xs text-gray-500">面積 = 縦 (m) × 横 (m) × 枚数 で計算しています。</p>
@@ -397,6 +457,16 @@ const TemplateGuide = ({ onDownload }) => (
 2025-11-02,3.10,1500,20.1,109.2,111.0
 2025-11-03,3.55,1500,20.1,127.3,129.4`}
             </pre>
+
+            <div className="mt-8 pt-6 border-t border-gray-100">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">PR値の算出式</h3>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 text-gray-700">
+                    <p className="mb-2 font-medium">各PCSのPR（Performance Ratio）は以下の式で算出されます：</p>
+                    <p className="font-mono text-sm bg-white p-3 rounded border border-gray-200 overflow-x-auto">
+                        PR(%) = ( PCS発電量[kWh] ÷ ( 日射量[kWh/m²] × パネル総面積[m²] × (パネル変換効率[%] ÷ 100) ) ) × 100
+                    </p>
+                </div>
+            </div>
         </div>
     </div>
 );
