@@ -254,6 +254,13 @@ const Header = ({ onReset, hasData, currentView, onChangeView }) => (
                     >
                         <Icons.FileText className="w-4 h-4" /> CSV結合ツール
                     </a>
+                    <a 
+                        href="pcs_sorter.html"
+                        className="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1 border border-gray-100 ml-2"
+                        title="PCS枚数別仕訳ツールへ移動"
+                    >
+                        <Icons.FileText className="w-4 h-4" /> PCS仕訳ツール
+                    </a>
                 </nav>
             </div>
             
