@@ -261,7 +261,7 @@ const Header = ({ onReset, hasData, currentView, onChangeView }) => (
                 {currentView === 'analyzer' && hasData && <button onClick={onReset} className="text-sm font-medium text-blue-600 hover:text-blue-500">Upload New CSV</button>}
                 <div className="hidden sm:flex flex-col items-end text-[10px] text-gray-400 leading-tight border-l pl-4 border-gray-200">
                     <span>Last Updated: 2025.12.10</span>
-                    <span>Version 1.0.2</span>
+                    <span>Version 1.0.3</span>
                 </div>
             </div>
         </div>
@@ -1030,22 +1030,74 @@ const App = () => {
         // Headers: Date, Irrad, Area, Eff, ...PCS_Names
         const headers = ['Date', 'Irradiation (kWh/m²)', 'Panel Area (m²)', 'Efficiency (%)', ...data.pcsList];
         
-        const rows = data.plantDaily.map(row => {
+        // 1. Convert data to sheet (basic data)
+        const rows = [headers];
+        data.plantDaily.forEach(row => {
             const pcsValues = data.pcsList.map(id => {
                 const val = row.pcsDetails && row.pcsDetails[id];
-                return val !== null && val !== undefined ? parseFloat(val.toFixed(2)) : ''; 
+                return val !== null && val !== undefined ? parseFloat(val.toFixed(2)) : null; 
             });
-            return [
+            rows.push([
                 row.date,
                 row.irradiation,
                 row.panelArea,
                 row.efficiency,
                 ...pcsValues
-            ];
+            ]);
         });
-
+        
         const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+
+        // 2. Apply Styles with xlsx-js-style
+        // Range: stats.vMin, stats.vMax
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        
+        // Loop through data rows (start from row 1, skipping header row 0)
+        // Loop through PCS columns (start from col 4)
+        for (let R = 1; R <= range.e.r; ++R) {
+            // PCS columns start at index 4 (0:Date, 1:Irrad, 2:Area, 3:Eff, 4:PCS1...)
+            for (let C = 4; C <= range.e.c; ++C) {
+                const cellRef = XLSX.utils.encode_cell({r: R, c: C});
+                if (!ws[cellRef]) continue;
+
+                const cellValue = ws[cellRef].v;
+                if (cellValue === null || cellValue === undefined || typeof cellValue !== 'number') continue;
+
+                // Calculate Color
+                // Reuse getHeatColor logic but we need Hex without #
+                const hexColorWithHash = getHeatColor(cellValue, data.stats.vMin, data.stats.vMax);
+                const hexColor = hexColorWithHash.replace('#', '');
+                
+                // Get Text Color for contrast
+                const textColorWithHash = getTextColor(hexColorWithHash);
+                const textColor = textColorWithHash.replace('#', '');
+
+                // Apply Style
+                if (!ws[cellRef].s) ws[cellRef].s = {};
+                
+                ws[cellRef].s.fill = {
+                    patternType: "solid",
+                    fgColor: { rgb: hexColor }
+                };
+                ws[cellRef].s.font = {
+                    color: { rgb: textColor } // Contrast text color
+                };
+                ws[cellRef].s.alignment = {
+                    horizontal: "center"
+                };
+            }
+        }
+        
+        // Adjust column widths
+        ws['!cols'] = [
+            { wch: 12 }, // Date
+            { wch: 15 }, // Irrad
+            { wch: 15 }, // Area
+            { wch: 12 }, // Eff
+            ...data.pcsList.map(() => ({ wch: 10 })) // PCS cols
+        ];
+
         XLSX.utils.book_append_sheet(wb, ws, "PR Analysis");
         XLSX.writeFile(wb, `PR_Analysis_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
