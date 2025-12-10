@@ -7,6 +7,7 @@ It runs entirely in the browser using React (via CDN), Tailwind CSS, and Babel S
 
 *   `index.html`: The main entry point containing the HTML structure and loading external libraries (CDN).
 *   `js/app.js`: Contains the main React application logic, components, and data processing algorithms.
+*   `data/`: Contains reference data files (e.g., `PV_reference.xlsx`).
 
 ## Features
 
@@ -19,11 +20,19 @@ It runs entirely in the browser using React (via CDN), Tailwind CSS, and Babel S
 
 2.  **Panel Area Calculator**
     *   Calculates total PV panel area based on dimensions (vertical/horizontal) and quantity.
+    *   **Presets**: Includes presets for specific site configurations (e.g., Waki, Nasu).
+    *   **Copy Feature**: Easily copy the calculated total area to clipboard.
+
+3.  **Wake Reference Values (和気参考値)**
+    *   Displays reference data tables loaded from an Excel file (`data/PV_reference.xlsx`).
+    *   **Multi-Table Support**: Parses multiple sheets/tables from the Excel file.
+    *   **Specific Data Injection**: The "工区別" (Work Area) table is currently preset with specific system values as per requirements, overriding the Excel file content for this section.
+    *   **Formatting**: Includes 3-digit comma separation and specific highlighting for key metrics.
 
 ## How to Use
 
 1.  Open `index.html` in a modern web browser.
-2.  Navigate between "PR Analyzer" and "Panel Area Calculator" using the header menu.
+2.  Navigate between "PR Analyzer", "Panel Area Calculator", and "Wake Reference" using the header menu.
 3.  **For PR Analyzer**:
     *   Download the CSV template.
     *   Fill in your generation data (Date, Irradiation, PCS generation).
@@ -34,7 +43,7 @@ It runs entirely in the browser using React (via CDN), Tailwind CSS, and Babel S
 *   **Framework**: React 18 (UMD build)
 *   **Styling**: Tailwind CSS (CDN)
 *   **CSV Parsing**: PapaParse
-*   **Excel Generation**: SheetJS (xlsx)
+*   **Excel Handling**: SheetJS (xlsx) for both reading reference data and exporting results.
 *   **Deployment**: Static file hosting (no build process required).
 
 ## Development

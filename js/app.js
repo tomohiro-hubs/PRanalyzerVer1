@@ -241,14 +241,27 @@ const Header = ({ onReset, hasData, currentView, onChangeView }) => (
                     >
                         パネル面積計算
                     </button>
+                    <button 
+                        onClick={() => onChangeView('wake')}
+                        className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentView === 'wake' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                    >
+                        和気参考値
+                    </button>
+                    <a 
+                        href="csv_manager.html"
+                        className="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1 border border-gray-100 ml-2"
+                        title="CSV自動加工・結合ツールへ移動"
+                    >
+                        <Icons.FileText className="w-4 h-4" /> CSV結合ツール
+                    </a>
                 </nav>
             </div>
             
             <div className="flex items-center gap-4">
                 {currentView === 'analyzer' && hasData && <button onClick={onReset} className="text-sm font-medium text-blue-600 hover:text-blue-500">Upload New CSV</button>}
                 <div className="hidden sm:flex flex-col items-end text-[10px] text-gray-400 leading-tight border-l pl-4 border-gray-200">
-                    <span>Last Updated: 2025.12.05</span>
-                    <span>Version 1.0.1</span>
+                    <span>Last Updated: 2025.12.10</span>
+                    <span>Version 1.0.2</span>
                 </div>
             </div>
         </div>
@@ -391,6 +404,377 @@ const PanelCalculator = () => {
                     </div>
                     <p className="mt-4 text-xs text-gray-500">面積 = 縦 (m) × 横 (m) × 枚数 で計算しています。</p>
                 </div>
+            </div>
+        </div>
+    );
+};
+
+const WakeReference = () => {
+    const [tables, setTables] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [sortConfigs, setSortConfigs] = useState([]);
+
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                const response = await fetch('data/PV_reference.xlsx');
+                if (!response.ok) throw new Error('データファイルを読み込めませんでした。');
+                
+                const arrayBuffer = await response.arrayBuffer();
+                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                
+                if (workbook.SheetNames.length === 0) throw new Error('シートが見つかりません。');
+
+                const processedTables = workbook.SheetNames.map(sheetName => {
+                    const worksheet = workbook.Sheets[sheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    if (jsonData.length === 0) return null;
+
+                    // Header Detection: Prioritize rows with specific keywords AND multiple columns
+                    let headerRowIndex = -1;
+                    const scanLimit = Math.min(jsonData.length, 20);
+                    
+                    // Keywords to identify header rows
+                    const headerKeywords = ['工区', '変圧器', 'パワコン', 'PCS', 'No.', 'ID', '名称', 'PV容量', '面積', '地点'];
+
+                    let bestRowIndex = -1;
+                    let maxColsInKeywordRow = 0;
+
+                    // 1. Keyword Scan with Column Count Check
+                    for (let i = 0; i < scanLimit; i++) {
+                        const row = jsonData[i];
+                        if (!row) continue;
+                        
+                        const nonEmptyCount = row.filter(c => c !== undefined && c !== null && c.toString().trim() !== '').length;
+                        
+                        // Check if row contains any of the keywords (partial match)
+                        const hasKeyword = row.some(cell => 
+                            cell && headerKeywords.some(kw => cell.toString().indexOf(kw) !== -1)
+                        );
+
+                        if (hasKeyword) {
+                            // Fix: Use stricter logic to prevent skipping data rows.
+                            // If we find a row with keywords and sufficient columns, we accept it as header immediately
+                            // UNLESS we find a better one higher up? No, usually header is the first substantial row.
+                            // But title rows (1 col) might also match.
+                            
+                            // If current row has significantly more columns than previous best, take it.
+                            if (nonEmptyCount > maxColsInKeywordRow) {
+                                maxColsInKeywordRow = nonEmptyCount;
+                                bestRowIndex = i;
+                            }
+                        }
+                    }
+
+                    // Use the best row found via keywords if it has at least 1 column (relaxed from 2)
+                    if (bestRowIndex !== -1 && maxColsInKeywordRow >= 1) {
+                        headerRowIndex = bestRowIndex;
+                    } else {
+                        // 2. Fallback: Max Columns Scan
+                        let maxCols = 0;
+                        headerRowIndex = 0;
+                        for (let i = 0; i < scanLimit; i++) {
+                            const row = jsonData[i];
+                            if (!row) continue;
+                            const nonEmptyCount = row.filter(c => c !== undefined && c !== null && c.toString().trim() !== '').length;
+                            if (nonEmptyCount > maxCols) {
+                                maxCols = nonEmptyCount;
+                                headerRowIndex = i;
+                            }
+                        }
+                    }
+
+                    const originalHeaderRow = jsonData[headerRowIndex];
+                    const dataRows = jsonData.slice(headerRowIndex + 1);
+
+                    // Identify valid column indices (where header is not empty)
+                    const validColumnIndices = [];
+                    originalHeaderRow.forEach((h, i) => {
+                        if (h !== undefined && h !== null && h.toString().trim() !== '') {
+                            validColumnIndices.push(i);
+                        }
+                    });
+
+                    // Extract headers using valid indices
+                    const headers = validColumnIndices.map(i => originalHeaderRow[i]);
+
+                    // Extract data using valid indices
+                    const rows = dataRows.map(row => {
+                        const obj = {};
+                        let hasData = false;
+                        validColumnIndices.forEach((colIndex, i) => {
+                            const headerName = headers[i];
+                            const val = row[colIndex];
+                            obj[headerName] = val;
+                            if (val !== undefined && val !== null && val !== '') hasData = true;
+                        });
+                        return hasData ? obj : null;
+                    }).filter(row => row !== null);
+
+                    return {
+                        title: sheetName,
+                        headers: headers,
+                        data: rows
+                    };
+                }).filter(t => t !== null && t.headers.length > 0);
+
+                // Override titles based on index as requested by user
+                const customTitles = ['PCS一覧', '工区別', '変圧器別', 'パネル情報'];
+                processedTables.forEach((table, index) => {
+                    if (index < customTitles.length) {
+                        table.title = customTitles[index];
+                    }
+                    
+                    // Inject hardcoded data for '工区別' (index 1) as requested
+                    if (index === 1) {
+                         table.headers = ['工区', 'Wh', 'kWh', '枚数', 'パネル面積（m2)'];
+                         table.data = [
+                            { '工区': 1, 'Wh': 1088100, 'kWh': 1088.10, '枚数': 3348, 'パネル面積（m2)': 6496.30 },
+                            { '工区': 2, 'Wh': 2293200, 'kWh': 2293.20, '枚数': 7056, 'パネル面積（m2)': 13691.12 },
+                            { '工区': 3, 'Wh': 836550, 'kWh': 836.55, '枚数': 2574, 'パネル面積（m2)': 4994.47 },
+                            { '工区': 4, 'Wh': 561600, 'kWh': 561.60, '枚数': 1728, 'パネル面積（m2)': 3352.93 },
+                            { '工区': 5, 'Wh': 1690650, 'kWh': 1690.65, '枚数': 5202, 'パネル面積（m2)': 10093.71 },
+                            { '工区': 6, 'Wh': 859950, 'kWh': 859.95, '枚数': 2646, 'パネル面積（m2)': 5134.17 },
+                            { '工区': 7, 'Wh': 1638000, 'kWh': 1638.00, '枚数': 5040, 'パネル面積（m2)': 9779.37 },
+                            { '工区': 8, 'Wh': 245700, 'kWh': 245.70, '枚数': 756, 'パネル面積（m2)': 1466.91 },
+                            { '工区': 9, 'Wh': 2129400, 'kWh': 2129.40, '枚数': 6552, 'パネル面積（m2)': 12713.19 },
+                            { '工区': 10, 'Wh': 497250, 'kWh': 497.25, '枚数': 1530, 'パネル面積（m2)': 2968.74 },
+                            { '工区': 11, 'Wh': 1023750, 'kWh': 1023.75, '枚数': 3150, 'パネル面積（m2)': 6112.11 },
+                            { '工区': 12, 'Wh': 1924650, 'kWh': 1924.65, '枚数': 5922, 'パネル面積（m2)': 11490.76 },
+                            { '工区': 13, 'Wh': 1105650, 'kWh': 1105.65, '枚数': 3402, 'パネル面積（m2)': 6601.08 },
+                            { '工区': 14, 'Wh': 1333800, 'kWh': 1333.80, '枚数': 4104, 'パネル面積（m2)': 7963.20 },
+                            { '工区': 15, 'Wh': 2129400, 'kWh': 2129.40, '枚数': 6552, 'パネル面積（m2)': 12713.19 },
+                            { '工区': 16, 'Wh': 122850, 'kWh': 122.85, '枚数': 378, 'パネル面積（m2)': 733.45 },
+                            { '工区': 17, 'Wh': 327600, 'kWh': 327.60, '枚数': 1008, 'パネル面積（m2)': 1955.87 },
+                            { '工区': 18, 'Wh': 1977300, 'kWh': 1977.30, '枚数': 6084, 'パネル面積（m2)': 11805.10 },
+                            { '工区': 19, 'Wh': 1216800, 'kWh': 1216.80, '枚数': 3744, 'パネル面積（m2)': 7264.68 },
+                            { '工区': '合計', 'Wh': 23002200, 'kWh': 23002.20, '枚数': 70776, 'パネル面積（m2)': 137330.35 }
+                         ];
+                    }
+
+                    // Inject hardcoded data for '変圧器別' (index 2) as requested
+                    if (index === 2) {
+                        table.headers = ['変圧器', 'Wh', 'kWh', '枚数', 'パネル面積(m2)'];
+                        table.data = [
+                            { '変圧器': 'A1', 'Wh': 2293200, 'kWh': 2293.20, '枚数': 7056, 'パネル面積(m2)': 13691.12 },
+                            { '変圧器': 'A2', 'Wh': 2170350, 'kWh': 2170.35, '枚数': 6678, 'パネル面積(m2)': 12957.67 },
+                            { '変圧器': 'A3', 'Wh': 2357550, 'kWh': 2357.55, '枚数': 7254, 'パネル面積(m2)': 14075.31 },
+                            { '変圧器': 'A4', 'Wh': 2392650, 'kWh': 2392.65, '枚数': 7362, 'パネル面積(m2)': 14284.87 },
+                            { '変圧器': 'A5', 'Wh': 2293200, 'kWh': 2293.20, '枚数': 7056, 'パネル面積(m2)': 13691.12 },
+                            { '変圧器': 'B1', 'Wh': 2252250, 'kWh': 2252.25, '枚数': 6930, 'パネル面積(m2)': 13446.64 },
+                            { '変圧器': 'B2', 'Wh': 2410200, 'kWh': 2410.20, '枚数': 7416, 'パネル面積(m2)': 14389.65 },
+                            { '変圧器': 'B3', 'Wh': 2275650, 'kWh': 2275.65, '枚数': 7002, 'パネル面積(m2)': 13586.34 },
+                            { '変圧器': 'B4', 'Wh': 2304900, 'kWh': 2304.90, '枚数': 7092, 'パネル面積(m2)': 13760.98 },
+                            { '変圧器': 'B5', 'Wh': 2252250, 'kWh': 2252.25, '枚数': 6930, 'パネル面積(m2)': 13446.64 },
+                            { '変圧器': '合計', 'Wh': 23002200, 'kWh': 23002.20, '枚数': 70776, 'パネル面積(m2)': 137330.35 }
+                        ];
+                    }
+
+                    // Inject hardcoded data for 'パネル情報' (index 3) as requested
+                    if (index === 3) {
+                        table.headers = ['項目', '値'];
+                        table.data = [
+                            { '項目': 'パネル品番', '値': 'JINKO JKM325PP-72-J' },
+                            { '項目': 'モジュール型式', '値': 'JKM325PP-72J' },
+                            { '項目': '公称最大出力（Pmax）', '値': '325 Wp' },
+                            { '項目': '公称最大出力動作電圧（Vmp）', '値': '37.6 V' },
+                            { '項目': '公称最大出力動作電流（Imp）', '値': '8.66 A' },
+                            { '項目': '公称開放電圧（Voc）', '値': '46.7 V' },
+                            { '項目': '公称短絡電流（Isc）', '値': '9.10 A' },
+                            { '項目': 'モジュール変換効率', '値': '16.75 %' },
+                            { '項目': 'モジュール真性変換効率（セル実効変換効率）', '値': '18.50 %' },
+                            { '項目': 'セル合計面積', '値': '1.752 ㎡' }
+                        ];
+                    }
+                });
+
+                setTables(processedTables);
+                setSortConfigs(processedTables.map(() => ({ key: null, direction: 'asc' })));
+                setLoading(false);
+            } catch (err) {
+                console.error(err);
+                setError(err.message);
+                setLoading(false);
+            }
+        };
+
+        loadData();
+    }, []);
+
+    const handleSort = (tableIndex, key) => {
+        setSortConfigs(prev => {
+            const newConfigs = [...prev];
+            const current = newConfigs[tableIndex];
+            let direction = 'asc';
+            if (current.key === key && current.direction === 'asc') {
+                direction = 'desc';
+            }
+            newConfigs[tableIndex] = { key, direction };
+            return newConfigs;
+        });
+    };
+
+    const getSortedData = (tableIndex) => {
+        const table = tables[tableIndex];
+        if (!table) return [];
+        const config = sortConfigs[tableIndex];
+        
+        let sortableData = [...table.data];
+        if (config && config.key !== null) {
+            sortableData.sort((a, b) => {
+                let valA = a[config.key];
+                let valB = b[config.key];
+                
+                const numA = parseFloat(valA);
+                const numB = parseFloat(valB);
+                if (!isNaN(numA) && !isNaN(numB)) {
+                    valA = numA;
+                    valB = numB;
+                }
+
+                if (valA === undefined || valA === null) valA = -Infinity;
+                if (valB === undefined || valB === null) valB = -Infinity;
+
+                if (valA < valB) return config.direction === 'asc' ? -1 : 1;
+                if (valA > valB) return config.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        return sortableData;
+    };
+
+    const handleExport = () => {
+        if (!tables || tables.length === 0) return;
+        
+        const wb = XLSX.utils.book_new();
+        
+        tables.forEach(table => {
+            // Ensure headers are used for column ordering
+            const ws = XLSX.utils.json_to_sheet(table.data, { header: table.headers });
+            
+            // Excel sheet names limited to 31 chars
+            let sheetName = table.title || 'Sheet';
+            if (sheetName.length > 31) sheetName = sheetName.substring(0, 31);
+            
+            // Handle duplicate sheet names if any
+            if (wb.SheetNames.includes(sheetName)) {
+                let i = 1;
+                while (wb.SheetNames.includes(`${sheetName}_${i}`)) i++;
+                sheetName = `${sheetName}_${i}`;
+            }
+
+            XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        });
+
+        const dateStr = new Date().toISOString().split('T')[0];
+        XLSX.writeFile(wb, `和気参考値_${dateStr}.xlsx`);
+    };
+
+    if (loading) return <div className="text-center py-12"><div className="spinner text-blue-600 mx-auto"></div><p className="mt-4 text-gray-500">データを読み込み中...</p></div>;
+    if (error) return <div className="text-center py-12 text-red-600">エラーが発生しました: {error}</div>;
+
+    const renderTable = (table, index) => {
+        const sortedData = getSortedData(index);
+        const config = sortConfigs[index] || { key: null, direction: 'asc' };
+
+        return (
+            <div key={index} className="bg-white shadow rounded-lg overflow-hidden flex flex-col h-full border border-gray-200">
+                <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                    <h3 className="text-md font-bold text-gray-800">{table.title}</h3>
+                    <div className="text-xs text-gray-500">{sortedData.length} 件</div>
+                </div>
+                <div className="overflow-auto flex-1 max-h-[500px]">
+                    <table className="min-w-full divide-y divide-gray-200 relative">
+                        <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm">
+                            <tr>
+                                {table.headers.map((header, idx) => (
+                                    <th 
+                                        key={idx}
+                                        className="px-4 py-2 text-left text-xs font-bold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors whitespace-nowrap border-b border-gray-200"
+                                        onClick={() => handleSort(index, header)}
+                                    >
+                                        <div className="flex items-center gap-1">
+                                            {header}
+                                            {config.key === header && (
+                                                config.direction === 'asc' ? <Icons.ChevronUp className="w-3 h-3"/> : <Icons.ChevronDown className="w-3 h-3"/>
+                                            )}
+                                        </div>
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {sortedData.map((row, rowIdx) => {
+                                // Check for "Total" row (工区='合計' or 変圧器='合計')
+                                const isTotalRow = Object.values(row).some(val => val === '合計');
+                                const rowClass = isTotalRow ? "bg-orange-100 font-bold hover:bg-orange-200" : "hover:bg-blue-50 transition-colors";
+
+                                return (
+                                <tr key={rowIdx} className={rowClass}>
+                                    {table.headers.map((header, colIdx) => {
+                                        let val = row[header];
+                                        let isNum = false;
+                                        
+                                        // 3-digit separator logic
+                                        if (val !== undefined && val !== null && val !== '') {
+                                            const num = parseFloat(val);
+                                            if (!isNaN(num)) {
+                                                isNum = true;
+                                                // Specific formatting for Area (2 decimals)
+                                                if (header.indexOf('面積') !== -1 || header.indexOf('m2') !== -1) {
+                                                    val = num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                                } else {
+                                                    // General number formatting (3-digit separator, up to 3 decimals to be safe)
+                                                    val = num.toLocaleString(undefined, { maximumFractionDigits: 3 });
+                                                }
+                                            }
+                                        }
+
+                                        // Highlight logic for "16.75" (Module efficiency)
+                                        const isHighlight = val && val.toString().indexOf('16.75') !== -1;
+                                        
+                                        // Highlight logic for "Area" column in target tables
+                                        const targetTables = ['PCS一覧', '工区別', '変圧器別'];
+                                        const isAreaColumnTarget = targetTables.includes(table.title) && header.indexOf('面積') !== -1;
+
+                                        let bgStyle = '';
+                                        if (isHighlight) {
+                                            bgStyle = 'bg-yellow-200 font-bold';
+                                        } else if (isAreaColumnTarget) {
+                                            bgStyle = 'bg-yellow-100 font-medium';
+                                        }
+
+                                        return (
+                                            <td key={colIdx} className={`px-4 py-2 text-sm text-gray-700 whitespace-nowrap border-r border-gray-100 last:border-0 ${bgStyle}`}>
+                                                {val}
+                                            </td>
+                                        );
+                                    })}
+                                </tr>
+                            )})}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="animate-fade-in mt-6 h-[calc(100vh-140px)] overflow-y-auto pb-10">
+            <div className="flex justify-between items-center mb-4 px-2">
+                <h2 className="text-xl font-bold text-gray-900">和気 参考値データ</h2>
+                <button 
+                    onClick={handleExport}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 transition-colors"
+                >
+                    <Icons.Download className="mr-2 h-4 w-4" />
+                    Excel出力
+                </button>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {tables.map((table, index) => renderTable(table, index))}
             </div>
         </div>
     );
@@ -588,7 +972,7 @@ const DailyTable = ({ data, pcsList, stats }) => {
                             <tr key={i} className="hover:bg-gray-50">
                                 <td className="sticky left-0 z-10 bg-white px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap border-r shadow-sm">{row.date}</td>
                                 <td className="px-4 py-3 text-sm text-right text-gray-500 border-r">{row.irradiation?.toFixed(2) ?? '-'}</td>
-                                <td className="px-4 py-3 text-sm text-right text-gray-500 border-r">{row.panelArea?.toLocaleString() ?? '-'}</td>
+                                <td className="px-4 py-3 text-sm text-right text-gray-500 border-r">{row.panelArea?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '-'}</td>
                                 <td className="px-4 py-3 text-sm text-right text-gray-500 border-r">{row.efficiency?.toFixed(1) ?? '-'}</td>
                                 
                                 {/* Dynamic PCS PR Values */}
@@ -691,6 +1075,8 @@ const App = () => {
             <main className="max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {view === 'calculator' ? (
                     <PanelCalculator />
+                ) : view === 'wake' ? (
+                    <WakeReference />
                 ) : (
                     <React.Fragment>
                         {status === 'error' && (
