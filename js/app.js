@@ -267,8 +267,8 @@ const Header = ({ onReset, hasData, currentView, onChangeView }) => (
             <div className="flex items-center gap-4">
                 {currentView === 'analyzer' && hasData && <button onClick={onReset} className="text-sm font-medium text-blue-600 hover:text-blue-500">Upload New CSV</button>}
                 <div className="hidden sm:flex flex-col items-end text-[10px] text-gray-400 leading-tight border-l pl-4 border-gray-200">
-                    <span>Last Updated: 2025.12.10</span>
-                    <span>Version 1.0.3</span>
+                    <span>Last Updated: 2025.12.11</span>
+                    <span>Version 1.0.4</span>
                 </div>
             </div>
         </div>

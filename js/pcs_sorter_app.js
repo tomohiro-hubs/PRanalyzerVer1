@@ -364,9 +364,30 @@ function App() {
     // Header row
     const exportData = [targetColumns];
     
-    // Data rows
+    // Data rows with logic for panel_efficiency_percent and panel_area_m2
     commonData.forEach(row => {
-      const newRow = targetIndices.map(idx => row[idx]);
+      const newRow = targetIndices.map((idx, colIndex) => {
+         const colName = targetColumns[colIndex];
+         
+         // Fix: Set default panel_efficiency_percent to 16.75
+         if (colName === 'panel_efficiency_percent') {
+             return 16.75;
+         }
+         
+         // Fix: Calculate panel_area_m2 based on group count * 1.94
+         if (colName === 'panel_area_m2') {
+             // group.key is the count (e.g. "126") if not unclassified
+             const count = parseInt(group.key);
+             if (!isNaN(count)) {
+                 // Factor changed to 1.94
+                 return parseFloat((count * 1.94).toFixed(2));
+             }
+             // Fallback to original value if unclassified or invalid count
+             return row[idx];
+         }
+         
+         return row[idx];
+      });
       exportData.push(newRow);
     });
 
@@ -392,9 +413,23 @@ function App() {
   
   // Helper to safely get cell data by column name
   const getCell = useCallback((row, colName) => {
+    // Override logic for efficiency
+    if (colName === 'panel_efficiency_percent') {
+        return 16.75;
+    }
+    
+    // Override logic for area
+    if (colName === 'panel_area_m2' && activeGroupKey && activeGroupKey !== 'unclassified') {
+        const count = parseInt(activeGroupKey, 10);
+        if (!isNaN(count)) {
+            // Factor changed to 1.94 per request
+            return (count * 1.94).toFixed(2);
+        }
+    }
+
     const idx = headerMap[colName];
     return idx !== undefined ? row[idx] : '-';
-  }, [headerMap]);
+  }, [headerMap, activeGroupKey]);
 
   // Compute limited columns for preview
   const activeGroup = groupedSheets.find(g => g.key === activeGroupKey);
@@ -420,7 +455,7 @@ function App() {
           <div>
             <h1 className="text-xl font-bold text-slate-800 leading-tight">PCS枚数別仕訳ツール（和気SP用）</h1>
             <div className="text-[10px] text-slate-500 font-mono leading-none mt-0.5">
-              Version 1.0.0 | Last Updated: 2025.12.10
+              Version 1.0.4 | Last Updated: 2025.12.11
             </div>
           </div>
         </div>
